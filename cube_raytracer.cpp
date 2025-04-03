@@ -149,6 +149,9 @@ public:
     }
 };
 
+// Declaración adelantada para evitar dependencias circulares
+class Material;
+
 // Estructura para almacenar información de intersección
 struct HitRecord
 {
@@ -156,6 +159,7 @@ struct HitRecord
     Vec3 normal;
     double t;
     bool front_face;
+    Material *mat_ptr;
 
     inline void set_face_normal(const Ray &r, const Vec3 &outward_normal)
     {
@@ -178,8 +182,9 @@ public:
     Point3 center;
     double side_length;
     Color color;
+    Material *mat_ptr;
 
-    Cube(Point3 cen, double side, Color col) : center(cen), side_length(side), color(col) {}
+    Cube(Point3 cen, double side, Color col, Material *m) : center(cen), side_length(side), color(col), mat_ptr(m) {}
 
     virtual bool hit(const Ray &r, double t_min, double t_max, HitRecord &rec) const override
     {
@@ -266,6 +271,7 @@ public:
                 outward_normal = Vec3(0, 0, -1);
 
             rec.set_face_normal(r, outward_normal);
+            rec.mat_ptr = mat_ptr;
             return true;
         }
 
@@ -280,8 +286,9 @@ public:
     Point3 point;
     Vec3 normal;
     Color color;
+    Material *mat_ptr;
 
-    Plane(Point3 p, Vec3 n, Color col) : point(p), normal(unit_vector(n)), color(col) {}
+    Plane(Point3 p, Vec3 n, Color col, Material *m) : point(p), normal(unit_vector(n)), color(col), mat_ptr(m) {}
 
     virtual bool hit(const Ray &r, double t_min, double t_max, HitRecord &rec) const override
     {
@@ -299,6 +306,7 @@ public:
         rec.t = t;
         rec.p = r.at(t);
         rec.set_face_normal(r, normal);
+        rec.mat_ptr = mat_ptr;
 
         return true;
     }
@@ -404,11 +412,84 @@ Vec3 random_in_unit_sphere()
     }
 }
 
+// Función para generar un número aleatorio entre 0 y 1
+double random_double()
+{
+    static std::mt19937 generator;
+    static std::uniform_real_distribution<double> distribution(0.0, 1.0);
+    return distribution(generator);
+}
+
 // Función para generar un vector unitario aleatorio
 Vec3 random_unit_vector()
 {
     return unit_vector(random_in_unit_sphere());
 }
+
+// Función para calcular el vector reflejado
+Vec3 reflect(const Vec3 &v, const Vec3 &n)
+{
+    return v - 2 * dot(v, n) * n;
+}
+
+// Clase base para materiales
+class Material
+{
+public:
+    virtual bool scatter(
+        const Ray &r_in, const HitRecord &rec, Color &attenuation, Ray &scattered) const = 0;
+};
+
+// Material tipo espejo (reflectivo perfecto)
+class Metal : public Material
+{
+public:
+    Color albedo;
+    double fuzz;
+
+    Metal(const Color &a, double f = 0.0) : albedo(a), fuzz(f < 1 ? f : 1) {}
+
+    virtual bool scatter(
+        const Ray &r_in, const HitRecord &rec, Color &attenuation, Ray &scattered) const override
+    {
+        Vec3 reflected = reflect(unit_vector(r_in.direction()), rec.normal);
+        scattered = Ray(rec.p, reflected + fuzz * random_in_unit_sphere());
+        attenuation = albedo;
+        return (dot(scattered.direction(), rec.normal) > 0);
+    }
+};
+
+// Material lambertiano (difuso) con componente reflectiva
+class MixedMaterial : public Material
+{
+public:
+    Color albedo;
+    double reflectivity; // 0 = totalmente difuso, 1 = totalmente reflectivo
+
+    MixedMaterial(const Color &a, double r) : albedo(a), reflectivity(clamp(r, 0.0, 1.0)) {}
+
+    virtual bool scatter(
+        const Ray &r_in, const HitRecord &rec, Color &attenuation, Ray &scattered) const override
+    {
+        if (random_double() < reflectivity)
+        {
+            // Comportamiento reflectivo
+            Vec3 reflected = reflect(unit_vector(r_in.direction()), rec.normal);
+            scattered = Ray(rec.p, reflected);
+        }
+        else
+        {
+            // Comportamiento difuso
+            Vec3 scatter_direction = rec.normal + random_unit_vector();
+            // Evitar vector de dispersión cercano a cero
+            if (scatter_direction.length_squared() < 1e-8)
+                scatter_direction = rec.normal;
+            scattered = Ray(rec.p, scatter_direction);
+        }
+        attenuation = albedo;
+        return true;
+    }
+};
 
 // Función para calcular el color de un rayo con profundidad de rebote
 Color ray_color(const Ray &r, int depth, const Hittable &world)
@@ -421,39 +502,17 @@ Color ray_color(const Ray &r, int depth, const Hittable &world)
 
     if (world.hit(r, 0.001, infinity, rec))
     {
-        // Calculamos la dirección de rebote difuso
-        Vec3 target = rec.p + rec.normal + random_unit_vector();
-        Ray scattered(rec.p, target - rec.p);
+        Ray scattered;
+        Color attenuation;
 
-        // Buscamos el objeto que fue golpeado para obtener su color
-        Color object_color(0.8, 0.8, 0.8); // Color por defecto gris claro
-
-        if (const HittableList *list = dynamic_cast<const HittableList *>(&world))
+        // Si el material puede dispersar el rayo, calculamos el color recursivamente
+        if (rec.mat_ptr && rec.mat_ptr->scatter(r, rec, attenuation, scattered))
         {
-            // Encontramos qué objeto fue golpeado para obtener su color
-            for (const auto &object : list->objects)
-            {
-                // Verificamos si el punto de intersección está en este objeto
-                HitRecord temp_rec;
-                if (object->hit(r, 0.001, infinity, temp_rec) && temp_rec.t == rec.t)
-                {
-                    // Obtenemos el color según el tipo de objeto
-                    if (Cube *cube = dynamic_cast<Cube *>(object))
-                    {
-                        object_color = cube->color;
-                        break;
-                    }
-                    else if (Plane *plane = dynamic_cast<Plane *>(object))
-                    {
-                        object_color = plane->color;
-                        break;
-                    }
-                }
-            }
+            return attenuation * ray_color(scattered, depth - 1, world);
         }
 
-        // Aplicamos el color del objeto al rebote difuso
-        return 0.5 * ray_color(scattered, depth - 1, world) * object_color;
+        // Si no hay material o no puede dispersar, devolvemos negro (absorción total)
+        return Color(0, 0, 0);
     }
 
     // Si no golpeamos nada, devolvemos el color del cielo (gradiente)
@@ -488,23 +547,32 @@ int main()
     // Ajustamos el lower_left_corner para mantener la perspectiva correcta
     cam.lower_left_corner = cam.origin - cam.horizontal / 2 - cam.vertical / 2 + view_direction * 1.5;
 
+    // Creamos los materiales
+    Material *mirror_material = new Metal(Color(0.9, 0.9, 0.9), 0.0);         // Espejo perfecto
+    Material *mixed_material = new MixedMaterial(Color(0.8, 0.6, 0.2), 0.7);  // Material mixto con 70% reflectividad
+    Material *diffuse_blue = new MixedMaterial(Color(0.3, 0.3, 0.8), 0.1);    // Material principalmente difuso
+    Material *floor_material = new MixedMaterial(Color(0.5, 0.5, 0.5), 0.05); // Suelo con ligera reflectividad
+
     // Creamos la escena con múltiples cubos
     HittableList world;
 
-    // Cubo 1 - Cubo central azulado (dimensiones iguales en todas direcciones)
-    world.add(new Cube(Point3(0.5, 0.75, -0.5), 1.5, Color(0.3, 0.3, 0.8)));
+    // Cubo 1 - Cubo central azulado con material difuso
+    world.add(new Cube(Point3(0.5, 0.75, -0.5), 1.5, Color(0.3, 0.3, 0.8), diffuse_blue));
 
-    // Cubo 2 - Cubo más pequeño a la derecha de color rojizo
-    world.add(new Cube(Point3(2.5, 0.5, -1.0), 1.0, Color(0.8, 0.3, 0.3)));
+    // Cubo 2 - Cubo más pequeño a la derecha con material de espejo perfecto
+    world.add(new Cube(Point3(2.5, 0.5, -1.0), 1.0, Color(0.8, 0.3, 0.3), mixed_material));
 
-    // Cubo 3 - Cubo a la izquierda de color verdoso
-    world.add(new Cube(Point3(-1.5, 0.6, -0.5), 1.2, Color(0.3, 0.8, 0.3)));
+    // Cubo 3 - Cubo a la izquierda con material mixto
+    world.add(new Cube(Point3(-4.5, 0.6, -1.0), 2.5, Color(0.3, 0.8, 0.3), mirror_material));
 
-    // Cubo 4 - Cubo más pequeño al fondo
-    world.add(new Cube(Point3(1.0, 0.4, -2.5), 0.8, Color(0.8, 0.8, 0.3)));
+    // Cubo 4 - Cubo más pequeño al fondo con material difuso
+    world.add(new Cube(Point3(1.0, 0.4, -2.5), 0.8, Color(0.8, 0.8, 0.3), diffuse_blue));
 
-    // Añadimos un plano como suelo
-    world.add(new Plane(Point3(0, -1, 0), Vec3(0, 1, 0), Color(0.5, 0.5, 0.5)));
+    // Añadimos un plano como suelo con ligera reflectividad
+    world.add(new Plane(Point3(0, -1, 0), Vec3(0, 1, 0), Color(0.5, 0.5, 0.5), floor_material));
+
+    // Cubo 5 - Cubo al fondo para mostrar que el espejo funciona correctamente
+    world.add(new Cube(Point3(2.5, 1.4, -3.0), 1.0, Color(0.8, 0.3, 0.3), mixed_material));
 
     // Generador de números aleatorios para el anti-aliasing
     std::mt19937 generator;
