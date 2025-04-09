@@ -16,4 +16,4 @@ g++ -std=c++11 -o cube_raytracer cube_raytracer.cpp
 
 ## Second output with textures
 
-<img width="593" alt="image" src="https://github.com/user-attachments/assets/245dceca-555e-43a6-9513-2a33a44bc85b" />
+<img width="620" alt="image" src="https://github.com/user-attachments/assets/e42f717a-3229-4e09-a0e2-b7c8a5ca4c25" />
