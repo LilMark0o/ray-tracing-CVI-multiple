@@ -553,6 +553,13 @@ int main()
     Material *diffuse_blue = new MixedMaterial(Color(0.3, 0.3, 0.8), 0.1);    // Material principalmente difuso
     Material *floor_material = new MixedMaterial(Color(0.5, 0.5, 0.5), 0.05); // Suelo con ligera reflectividad
 
+    // Nuevos materiales con colores diversos
+    Material *diffuse_red = new MixedMaterial(Color(0.8, 0.2, 0.2), 0.15);   // Rojo con baja reflectividad
+    Material *diffuse_green = new MixedMaterial(Color(0.2, 0.8, 0.2), 0.2);  // Verde con reflectividad media-baja
+    Material *diffuse_purple = new MixedMaterial(Color(0.6, 0.2, 0.8), 0.3); // Púrpura con reflectividad media
+    Material *diffuse_teal = new MixedMaterial(Color(0.2, 0.7, 0.7), 0.25);  // Turquesa con reflectividad media
+    Material *diffuse_orange = new MixedMaterial(Color(0.9, 0.5, 0.1), 0.4); // Naranja con reflectividad media-alta
+
     // Creamos la escena con múltiples cubos
     HittableList world;
 
@@ -573,6 +580,31 @@ int main()
 
     // Cubo 5 - Cubo al fondo para mostrar que el espejo funciona correctamente
     world.add(new Cube(Point3(2.5, 1.4, -3.0), 1.0, Color(0.8, 0.3, 0.3), mixed_material));
+
+    // Añadimos 15 cubos más con material diffuse_blue para recrear la imagen de referencia
+    // Cubos pequeños dispersos por el suelo
+    world.add(new Cube(Point3(-2.0, 0.2, -1.5), 0.4, Color(0.3, 0.3, 0.8), diffuse_red));
+    world.add(new Cube(Point3(-1.5, 0.15, -2.0), 0.3, Color(0.3, 0.3, 0.8), diffuse_green));
+    world.add(new Cube(Point3(-1.0, 0.25, -3.0), 0.5, Color(0.3, 0.3, 0.8), diffuse_purple));
+    world.add(new Cube(Point3(-0.5, 0.1, -4.0), 0.2, Color(0.3, 0.3, 0.8), diffuse_teal));
+    world.add(new Cube(Point3(0.0, 0.3, -5.0), 0.6, Color(0.3, 0.3, 0.8), diffuse_orange));
+
+    // Más cubos en el lado derecho
+    world.add(new Cube(Point3(3.5, 0.2, -2.0), 0.4, Color(0.3, 0.3, 0.8), diffuse_blue));
+    world.add(new Cube(Point3(4.0, 0.15, -1.5), 0.3, Color(0.3, 0.3, 0.8), diffuse_red));
+    world.add(new Cube(Point3(4.5, 0.25, -2.5), 0.5, Color(0.3, 0.3, 0.8), diffuse_green));
+    world.add(new Cube(Point3(5.0, 0.1, -3.0), 0.2, Color(0.3, 0.3, 0.8), diffuse_purple));
+    world.add(new Cube(Point3(5.5, 0.3, -3.5), 0.6, Color(0.3, 0.3, 0.8), diffuse_teal));
+
+    // Cubos en el fondo
+    world.add(new Cube(Point3(0.0, 0.2, -6.0), 0.4, Color(0.3, 0.3, 0.8), diffuse_orange));
+    world.add(new Cube(Point3(1.5, 0.15, -5.5), 0.3, Color(0.3, 0.3, 0.8), diffuse_red));
+    world.add(new Cube(Point3(-1.5, 0.25, -5.5), 0.5, Color(0.3, 0.3, 0.8), diffuse_green));
+
+    // Cubos en primer plano
+    world.add(new Cube(Point3(-3.0, 0.2, 1.0), 0.4, Color(0.3, 0.3, 0.8), diffuse_purple));
+    world.add(new Cube(Point3(3.0, 0.15, 1.0), 0.3, Color(0.3, 0.3, 0.8), diffuse_teal));
+    world.add(new Cube(Point3(0.0, 0.25, 1.5), 0.5, Color(0.3, 0.3, 0.8), diffuse_orange));
 
     // Generador de números aleatorios para el anti-aliasing
     std::mt19937 generator;
